@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+[Unit]
+Description=Read-only incremental SharePoint sync
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/sharepoint-sync-all
+TimeoutStartSec=0
+Nice=10

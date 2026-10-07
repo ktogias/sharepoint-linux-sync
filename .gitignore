@@ -1,0 +1,21 @@
+# Local/private configuration
+projects.json
+*.private.json
+.env
+.env.*
+
+# Local sync materialization/state
+SharePoint/
+state/
+*.part
+*.part.meta.json
+
+# Editors / OS
+.vscode/
+.idea/
+*~
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc

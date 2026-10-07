@@ -1,0 +1,18 @@
+FROM registry.fedoraproject.org/fedora:44
+
+RUN dnf -y install \
+      git \
+      gh \
+      python3 \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf
+
+# All gh/git account state is intentionally ephemeral and container-local.
+ENV HOME=/tmp/publisher-home \
+    XDG_CONFIG_HOME=/tmp/publisher-xdg \
+    GH_CONFIG_DIR=/tmp/publisher-gh
+
+RUN mkdir -p /tmp/publisher-home /tmp/publisher-xdg /tmp/publisher-gh /work \
+    && chmod 700 /tmp/publisher-home /tmp/publisher-xdg /tmp/publisher-gh
+
+WORKDIR /work

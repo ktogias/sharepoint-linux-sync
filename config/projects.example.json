@@ -1,0 +1,11 @@
+[
+  {
+    "enabled": true,
+    "project": "ExampleProject",
+    "siteHost": "contoso.sharepoint.com",
+    "sitePath": "/sites/ExampleProject",
+    "driveName": "Documents",
+    "remoteRoot": "General",
+    "localRoot": "~/SharePoint/ExampleProject/General"
+  }
+]

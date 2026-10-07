@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+set -euo pipefail
+exec pwsh -NoLogo -NoProfile -Command '
+$ErrorActionPreference = "Stop"
+Import-Module Microsoft.Graph.Authentication
+Connect-MgGraph -Scopes "Files.Read.All" -ContextScope CurrentUser -NoWelcome
+$context = Get-MgContext
+if (-not $context -or [string]::IsNullOrWhiteSpace([string]$context.Account)) {
+    throw "Microsoft Graph authentication context was not established"
+}
+Write-Host "Authentication context OK for:" $context.Account
+Write-Host "Context scope:" $context.ContextScope
+'

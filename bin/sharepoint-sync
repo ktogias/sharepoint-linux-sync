@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+set -euo pipefail
+APP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/sharepoint-sync"
+exec pwsh -NoLogo -NoProfile -NonInteractive -File "$APP_DIR/sharepoint-sync.ps1" "$@"

@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+[Unit]
+Description=Periodic read-only SharePoint sync
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=@INTERVAL_MINUTES@min
+RandomizedDelaySec=60
+Unit=sharepoint-sync.service
+
+[Install]
+WantedBy=timers.target

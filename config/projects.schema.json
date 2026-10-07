@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/sharepoint-sync/projects.schema.json",
+  "title": "SharePoint Sync Projects",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["project", "siteHost", "sitePath"],
+    "properties": {
+      "enabled": { "type": "boolean" },
+      "project": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+      },
+      "siteHost": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9.-]+$"
+      },
+      "sitePath": {
+        "type": "string",
+        "pattern": "^/"
+      },
+      "driveName": { "type": "string", "minLength": 1 },
+      "remoteRoot": { "type": "string", "minLength": 1 },
+      "localRoot": { "type": "string", "minLength": 1 },
+      "maxDownloadAttempts": { "type": "integer", "minimum": 1, "maximum": 20 },
+      "connectionTimeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 3600 },
+      "operationTimeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 86400 }
+    }
+  }
+}
