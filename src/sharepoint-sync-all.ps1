@@ -64,6 +64,9 @@ foreach ($p in $projects) {
         if ($p.localRoot) {
             $arguments['LocalRoot'] = [string]$p.localRoot
         }
+        if ($null -ne $p.skipForbidden -and [bool]$p.skipForbidden) {
+            $arguments['SkipForbidden'] = $true
+        }
         if ($p.maxDownloadAttempts) {
             $arguments['MaxDownloadAttempts'] = [int]$p.maxDownloadAttempts
         }

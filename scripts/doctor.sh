@@ -26,6 +26,12 @@ else
   echo "FAIL: pwsh not found"; fail=1
 fi
 
+if command -v curl >/dev/null 2>&1; then
+  echo "curl: $(curl --version | head -n1)"
+else
+  echo "FAIL: curl not found"; fail=1
+fi
+
 if command -v pwsh >/dev/null 2>&1 && pwsh -NoLogo -NoProfile -NonInteractive -Command 'Import-Module Microsoft.Graph.Authentication -ErrorAction Stop' >/dev/null 2>&1; then
   echo "Microsoft.Graph.Authentication: OK"
 else

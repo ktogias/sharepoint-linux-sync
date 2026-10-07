@@ -6,9 +6,15 @@
   "items": {
     "type": "object",
     "additionalProperties": false,
-    "required": ["project", "siteHost", "sitePath"],
+    "required": [
+      "project",
+      "siteHost",
+      "sitePath"
+    ],
     "properties": {
-      "enabled": { "type": "boolean" },
+      "enabled": {
+        "type": "boolean"
+      },
       "project": {
         "type": "string",
         "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
@@ -21,12 +27,37 @@
         "type": "string",
         "pattern": "^/"
       },
-      "driveName": { "type": "string", "minLength": 1 },
-      "remoteRoot": { "type": "string", "minLength": 1 },
-      "localRoot": { "type": "string", "minLength": 1 },
-      "maxDownloadAttempts": { "type": "integer", "minimum": 1, "maximum": 20 },
-      "connectionTimeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 3600 },
-      "operationTimeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 86400 }
+      "driveName": {
+        "type": "string",
+        "minLength": 1
+      },
+      "remoteRoot": {
+        "type": "string",
+        "minLength": 1
+      },
+      "localRoot": {
+        "type": "string",
+        "minLength": 1
+      },
+      "maxDownloadAttempts": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 20
+      },
+      "connectionTimeoutSeconds": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 3600
+      },
+      "operationTimeoutSeconds": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 86400
+      },
+      "skipForbidden": {
+        "type": "boolean",
+        "description": "When true, individual HTTP 403 file downloads are logged, tracked, retried later, and do not fail the whole project."
+      }
     }
   }
 }

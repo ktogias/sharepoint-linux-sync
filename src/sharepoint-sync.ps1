@@ -17,6 +17,8 @@ param(
     [string]$RemoteRoot = 'General',
     [string]$LocalRoot,
 
+    [switch]$SkipForbidden,
+
     [ValidateRange(1, 20)]
     [int]$MaxDownloadAttempts = 4,
 
@@ -179,6 +181,51 @@ function Get-PartialMetadata([string]$MetadataPath) {
     }
 }
 
+function Remove-PartialDownload {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$PartialPath,
+
+        [Parameter(Mandatory = $true)]
+        [string]$MetadataPath
+    )
+
+    if ([IO.File]::Exists($PartialPath)) {
+        [IO.File]::Delete($PartialPath)
+    }
+    if ([IO.File]::Exists($MetadataPath)) {
+        [IO.File]::Delete($MetadataPath)
+    }
+}
+
+function Write-CurlUrlConfig {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Url
+    )
+
+    if ($Url.Contains([char]13) -or $Url.Contains([char]10)) {
+        throw 'Download URL contains an unexpected newline'
+    }
+
+    $escaped = $Url.Replace('\', '\\').Replace('"', '\"')
+    [IO.File]::WriteAllText(
+        $Path,
+        "url = `"$escaped`"`n",
+        [Text.UTF8Encoding]::new($false)
+    )
+
+    if (-not $IsWindows) {
+        [IO.File]::SetUnixFileMode(
+            $Path,
+            [IO.UnixFileMode]::UserRead -bor [IO.UnixFileMode]::UserWrite
+        )
+    }
+}
+
 function Download-DriveItem {
     param(
         [Parameter(Mandatory = $true)]
@@ -197,6 +244,9 @@ function Download-DriveItem {
     $partialMetadataPath = "$Destination.part.meta.json"
 
     for ($attempt = 1; $attempt -le $MaxDownloadAttempts; $attempt++) {
+        $curlConfigPath = $null
+        $curlErrorPath = $null
+
         try {
             # Request fresh metadata on every attempt because the pre-authenticated
             # download URL is intentionally short-lived.
@@ -222,8 +272,8 @@ function Download-DriveItem {
             $etag = [string]$metadata['eTag']
             $partialMetadata = Get-PartialMetadata $partialMetadataPath
 
-            # -Resume validates only byte counts. Preserve a partial file only if
-            # it belongs to the same provider version and expected size.
+            # Preserve a partial file only when it belongs to the same provider
+            # version and expected size.
             $partialIsCompatible = $false
             if ($partialMetadata -and -not [string]::IsNullOrWhiteSpace($etag)) {
                 $partialIsCompatible =
@@ -232,11 +282,28 @@ function Download-DriveItem {
             }
 
             if (-not $partialIsCompatible) {
-                if ([IO.File]::Exists($partialPath)) {
-                    [IO.File]::Delete($partialPath)
+                Remove-PartialDownload `
+                    -PartialPath $partialPath `
+                    -MetadataPath $partialMetadataPath
+            }
+
+            if ([IO.File]::Exists($partialPath) -and $null -ne $expected) {
+                $partialLength = [IO.FileInfo]::new($partialPath).Length
+
+                if ($partialLength -gt [long]$expected) {
+                    Remove-PartialDownload `
+                        -PartialPath $partialPath `
+                        -MetadataPath $partialMetadataPath
                 }
-                if ([IO.File]::Exists($partialMetadataPath)) {
-                    [IO.File]::Delete($partialMetadataPath)
+                elseif ($partialLength -eq [long]$expected) {
+                    [IO.File]::Move($partialPath, $Destination, $true)
+                    if ([IO.File]::Exists($partialMetadataPath)) {
+                        [IO.File]::Delete($partialMetadataPath)
+                    }
+                    return @{
+                        status   = 'downloaded'
+                        metadata = $metadata
+                    }
                 }
             }
 
@@ -249,17 +316,71 @@ function Download-DriveItem {
 
             Write-SyncLog "DOWNLOAD attempt $attempt/$MaxDownloadAttempts : $([IO.Path]::GetFileName($Destination))"
 
-            # The pre-authenticated download URL needs no Authorization header.
-            # OperationTimeoutSeconds limits stalls between stream reads, not the
-            # total transfer duration, so large files may take longer than it.
-            Invoke-WebRequest `
-                -Uri $downloadUrl `
-                -OutFile $partialPath `
-                -Resume `
-                -ConnectionTimeoutSeconds $ConnectionTimeoutSeconds `
-                -OperationTimeoutSeconds $OperationTimeoutSeconds `
-                -MaximumRedirection 8 |
-                Out-Null
+            # Use curl for the byte stream. The short-lived pre-authenticated
+            # URL is stored in a mode-0600 temp config so it is not exposed in
+            # the process command line.
+            $curlConfigPath = Join-Path (
+                [IO.Path]::GetTempPath()
+            ) "sharepoint-sync-$PID-$([Guid]::NewGuid().ToString('N')).curl"
+            $curlErrorPath = "$curlConfigPath.stderr"
+            Write-CurlUrlConfig -Path $curlConfigPath -Url $downloadUrl
+
+            $curlArgs = @(
+                '--config', $curlConfigPath,
+                '--location',
+                '--max-redirs', '8',
+                '--proto', '=https',
+                '--proto-redir', '=https',
+                '--fail',
+                '--silent',
+                '--show-error',
+                '--connect-timeout', [string]$ConnectionTimeoutSeconds,
+                '--speed-limit', '1',
+                '--speed-time', [string]$OperationTimeoutSeconds,
+                '--continue-at', '-',
+                '--output', $partialPath,
+                '--write-out', '%{http_code}'
+            )
+
+            $statusOutput = & $script:CurlCommand @curlArgs 2> $curlErrorPath
+            $curlExitCode = $LASTEXITCODE
+            $httpCodeText = (($statusOutput | ForEach-Object { [string]$_ }) -join '').Trim()
+            $httpCode = 0
+            [void][int]::TryParse($httpCodeText, [ref]$httpCode)
+
+            $curlError = ''
+            if ([IO.File]::Exists($curlErrorPath)) {
+                $curlError = [IO.File]::ReadAllText($curlErrorPath).Trim()
+            }
+
+            if ($curlExitCode -ne 0) {
+                if ($curlExitCode -eq 33) {
+                    Remove-PartialDownload `
+                        -PartialPath $partialPath `
+                        -MetadataPath $partialMetadataPath
+                    throw 'Server refused byte-range resume; partial download reset'
+                }
+
+                if ($httpCode -eq 403 -and $SkipForbidden) {
+                    Remove-PartialDownload `
+                        -PartialPath $partialPath `
+                        -MetadataPath $partialMetadataPath
+                    Write-SyncLog "DENIED  $([IO.Path]::GetFileName($Destination)) (HTTP 403; skipForbidden=true)"
+                    return @{
+                        status     = 'forbidden'
+                        metadata   = $metadata
+                        httpStatus = 403
+                    }
+                }
+
+                $detail = if ($curlError) { ": $curlError" } else { '' }
+                $httpDetail = if ($httpCode -gt 0) { ", HTTP $httpCode" } else { '' }
+                throw "curl download failed (exit $curlExitCode$httpDetail)$detail"
+            }
+
+            if ($httpCode -lt 200 -or $httpCode -ge 300) {
+                throw "Unexpected download HTTP status: $httpCode"
+            }
 
             if ($null -ne $expected) {
                 $actual = [IO.FileInfo]::new($partialPath).Length
@@ -272,7 +393,11 @@ function Download-DriveItem {
             if ([IO.File]::Exists($partialMetadataPath)) {
                 [IO.File]::Delete($partialMetadataPath)
             }
-            return
+
+            return @{
+                status   = 'downloaded'
+                metadata = $metadata
+            }
         }
         catch {
             if ($attempt -ge $MaxDownloadAttempts) {
@@ -281,6 +406,16 @@ function Download-DriveItem {
 
             Write-SyncLog "RETRY   download failed: $($_.Exception.Message)"
             Start-Sleep -Seconds ([Math]::Min(30, 5 * $attempt))
+        }
+        finally {
+            foreach ($temporaryPath in @($curlConfigPath, $curlErrorPath)) {
+                if (
+                    -not [string]::IsNullOrWhiteSpace($temporaryPath) -and
+                    [IO.File]::Exists($temporaryPath)
+                ) {
+                    [IO.File]::Delete($temporaryPath)
+                }
+            }
         }
     }
 }
@@ -321,6 +456,13 @@ $lockFile = Join-Path $script:StateDir 'sync.lock'
 
 New-Item -ItemType Directory -Force -Path $script:EffectiveLocalRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $script:StateDir | Out-Null
+
+$curl = Get-Command curl -CommandType Application -ErrorAction SilentlyContinue |
+    Select-Object -First 1
+if (-not $curl) {
+    throw 'curl is required for SharePoint file downloads'
+}
+$script:CurlCommand = $curl.Source
 
 $lock = $null
 
@@ -385,6 +527,55 @@ try {
         $state['items'] = @{}
     }
 
+    # If skipForbidden is enabled, denied items remain in state and are
+    # retried on later runs so a later permission grant can recover them.
+    if ($SkipForbidden) {
+        $deniedRecovered = 0
+
+        foreach ($deniedId in @($state['items'].Keys)) {
+            $deniedState = $state['items'][$deniedId]
+            if (-not $deniedState['denied'] -or [bool]$deniedState['folder']) {
+                continue
+            }
+
+            $deniedRelative = [string]$deniedState['path']
+            $deniedPath = Get-SafeLocalPath $deniedRelative
+            $deniedParent = Split-Path -Parent $deniedPath
+            New-Item -ItemType Directory -Force -Path $deniedParent | Out-Null
+
+            try {
+                $retryResult = Download-DriveItem `
+                    -DriveId $driveId `
+                    -ItemId $deniedId `
+                    -Destination $deniedPath `
+                    -ExpectedSize $deniedState['size']
+
+                if ($retryResult['status'] -eq 'downloaded') {
+                    $retryMetadata = $retryResult['metadata']
+
+                    if ($retryMetadata['lastModifiedDateTime']) {
+                        $retryModifiedUtc = Convert-ToUtcDateTime $retryMetadata['lastModifiedDateTime']
+                        [IO.File]::SetLastWriteTimeUtc($deniedPath, $retryModifiedUtc)
+                    }
+
+                    $deniedState['size'] = $retryMetadata['size']
+                    $deniedState['etag'] = $retryMetadata['eTag']
+                    $deniedState['modified'] = $retryMetadata['lastModifiedDateTime']
+                    $deniedState['denied'] = $false
+                    $deniedRecovered++
+                    Write-SyncLog "RECOVER $deniedRelative"
+                }
+            }
+            catch {
+                Write-SyncLog "WARN    denied-item retry failed: $deniedRelative : $($_.Exception.Message)"
+            }
+        }
+
+        if ($deniedRecovered -gt 0) {
+            Save-State $state
+        }
+    }
+
     if ($state['deltaLink']) {
         Write-SyncLog 'Incremental sync'
         $url = [string]$state['deltaLink']
@@ -433,6 +624,7 @@ try {
     $folders = 0
     $deleted = 0
     $moved = 0
+    $forbidden = 0
 
     foreach ($id in $latest.Keys) {
         $item = $latest[$id]
@@ -473,6 +665,7 @@ try {
         $relative = Get-RelativePath $item
         $localPath = Get-SafeLocalPath $relative
         $isFolder = $null -ne $item['folder']
+        $downloadResult = $null
 
         if ($state['items'].ContainsKey($id)) {
             $oldRelative = [string]$state['items'][$id]['path']
@@ -519,19 +712,24 @@ try {
                 $skipped++
             }
             else {
-                Download-DriveItem `
+                $downloadResult = Download-DriveItem `
                     -DriveId $driveId `
                     -ItemId $id `
                     -Destination $localPath `
                     -ExpectedSize $item['size']
 
-                if ($item['lastModifiedDateTime']) {
-                    $modifiedUtc = Convert-ToUtcDateTime $item['lastModifiedDateTime']
-                    [IO.File]::SetLastWriteTimeUtc($localPath, $modifiedUtc)
+                if ($downloadResult['status'] -eq 'forbidden') {
+                    $forbidden++
                 }
+                else {
+                    if ($item['lastModifiedDateTime']) {
+                        $modifiedUtc = Convert-ToUtcDateTime $item['lastModifiedDateTime']
+                        [IO.File]::SetLastWriteTimeUtc($localPath, $modifiedUtc)
+                    }
 
-                Write-SyncLog "GET     $relative"
-                $downloaded++
+                    Write-SyncLog "GET     $relative"
+                    $downloaded++
+                }
             }
         }
 
@@ -541,6 +739,11 @@ try {
             size     = $item['size']
             etag     = $item['eTag']
             modified = $item['lastModifiedDateTime']
+            denied   = (
+                -not $isFolder -and
+                $null -ne $downloadResult -and
+                $downloadResult['status'] -eq 'forbidden'
+            )
         }
     }
 
@@ -551,7 +754,7 @@ try {
 
     Write-SyncLog (
         "DONE: $downloaded downloaded, $skipped unchanged, $folders folders, " +
-        "$moved moved, $deleted deleted"
+        "$moved moved, $deleted deleted, $forbidden forbidden"
     )
 }
 finally {

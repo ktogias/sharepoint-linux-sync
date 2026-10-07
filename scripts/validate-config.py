@@ -23,6 +23,7 @@ ALLOWED_KEYS = {
     "driveName",
     "remoteRoot",
     "localRoot",
+    "skipForbidden",
     "maxDownloadAttempts",
     "connectionTimeoutSeconds",
     "operationTimeoutSeconds",
@@ -83,8 +84,9 @@ def validate(path: Path) -> int:
         if not site_path.startswith("/") or "\n" in site_path or "\r" in site_path:
             fail(f"entry {index}: sitePath must be an absolute provider path")
 
-        if "enabled" in item and not isinstance(item["enabled"], bool):
-            fail(f"entry {index}: enabled must be boolean")
+        for key in ("enabled", "skipForbidden"):
+            if key in item and not isinstance(item[key], bool):
+                fail(f"entry {index}: {key} must be boolean")
 
         for key in ("driveName", "remoteRoot", "localRoot"):
             if key in item and (not isinstance(item[key], str) or not item[key]):

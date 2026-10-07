@@ -6,6 +6,7 @@
     "sitePath": "/sites/ExampleProject",
     "driveName": "Documents",
     "remoteRoot": "General",
-    "localRoot": "~/SharePoint/ExampleProject/General"
+    "localRoot": "~/SharePoint/ExampleProject/General",
+    "skipForbidden": false
   }
 ]
