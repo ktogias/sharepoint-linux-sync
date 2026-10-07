@@ -9,6 +9,7 @@ DEFAULT_INTERVAL=15
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
 INSTALL_DIR="$DATA_HOME/$APP_NAME"
 BIN_DIR="$HOME/.local/bin"
 CONFIG_DIR="$CONFIG_HOME/$APP_NAME"
@@ -117,6 +118,7 @@ install_latest_powershell_rpm() {
 import json, re, sys
 release = json.load(open(sys.argv[1], encoding="utf-8"))
 rpm = None
+rpm_digest = None
 hashes = None
 for asset in release.get("assets", []):
     name = asset.get("name", "")
@@ -125,24 +127,31 @@ for asset in release.get("assets", []):
         rpm = url
     elif name == "hashes.sha256":
         hashes = url
-if not rpm or not hashes:
+if not rpm or (not rpm_digest and not hashes):
     raise SystemExit("required PowerShell release assets not found")
 print(rpm)
-print(hashes)
+print(hashes or "")
+print(rpm_digest or "")
 PY
   )
 
   rpm_url="${urls[0]:-}"
   hashes_url="${urls[1]:-}"
-  [[ -n "$rpm_url" && -n "$hashes_url" ]] || die "Could not determine PowerShell release assets"
+  expected_hash="${urls[2]:-}"
+  [[ -n "$rpm_url" ]] || die "Could not determine PowerShell RPM release asset"
 
   curl -fsSL --retry 3 --retry-delay 2 "$rpm_url" -o "$rpm_file"
-  curl -fsSL --retry 3 --retry-delay 2 "$hashes_url" -o "$hashes_file"
 
-  expected_line="$(grep -F "$(basename "$rpm_url")" "$hashes_file" | head -n1 || true)"
-  [[ -n "$expected_line" ]] || die "No checksum found for downloaded PowerShell RPM"
+  if [[ -z "$expected_hash" ]]; then
+    [[ -n "$hashes_url" ]] || die "No SHA-256 digest or hashes.sha256 asset was published for the PowerShell RPM"
+    curl -fsSL --retry 3 --retry-delay 2 "$hashes_url" -o "$hashes_file"
+    expected_line="$(grep -F "$(basename "$rpm_url")" "$hashes_file" | head -n1 || true)"
+    [[ -n "$expected_line" ]] || die "No checksum found for downloaded PowerShell RPM"
+    expected_hash="$(awk '{print $1}' <<<"$expected_line")"
+  fi
 
-  printf '%s  %s\n' "$(awk '{print $1}' <<<"$expected_line")" "$rpm_file" | sha256sum -c -
+  [[ "$expected_hash" =~ ^[0-9A-Fa-f]{64}$ ]] || die "Invalid SHA-256 checksum for downloaded PowerShell RPM"
+  printf '%s  %s\n' "${expected_hash,,}" "$rpm_file" | sha256sum -c -
   sudo dnf install -y "$rpm_file"
   rm -rf "$tmp"
   trap - RETURN
@@ -271,7 +280,7 @@ Local mirrors default to:
   ~/SharePoint/<project>/<remoteRoot>/
 
 State is stored under:
-  ~/.local/state/sharepoint-sync/
+  $STATE_HOME/sharepoint-sync/
 
 Important: Files.Read.All is a broad delegated read permission. Your tenant may
 require administrator approval or impose Conditional Access policies.

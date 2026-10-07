@@ -308,7 +308,14 @@ if (-not $stateRootName) {
     $stateRootName = 'root'
 }
 
-$script:StateDir = Join-Path $HOME ".local/state/sharepoint-sync/$Project-$stateRootName"
+$stateHome = if (-not [string]::IsNullOrWhiteSpace($env:XDG_STATE_HOME)) {
+    $env:XDG_STATE_HOME
+}
+else {
+    Join-Path $HOME '.local/state'
+}
+
+$script:StateDir = Join-Path $stateHome "sharepoint-sync/$Project-$stateRootName"
 $script:StateFile = Join-Path $script:StateDir 'state.json'
 $lockFile = Join-Path $script:StateDir 'sync.lock'
 

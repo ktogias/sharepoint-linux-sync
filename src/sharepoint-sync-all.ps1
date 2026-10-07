@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 param(
-    [string]$ConfigPath = "$HOME/.config/sharepoint-sync/projects.json"
+    [string]$ConfigPath
 )
 
 $ErrorActionPreference = 'Continue'
@@ -13,7 +13,19 @@ function Expand-HomePath([string]$Path) {
     return $Path
 }
 
-$ConfigPath = Expand-HomePath $ConfigPath
+if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
+    $configHome = if (-not [string]::IsNullOrWhiteSpace($env:XDG_CONFIG_HOME)) {
+        $env:XDG_CONFIG_HOME
+    }
+    else {
+        Join-Path $HOME '.config'
+    }
+    $ConfigPath = Join-Path $configHome 'sharepoint-sync/projects.json'
+}
+else {
+    $ConfigPath = Expand-HomePath $ConfigPath
+}
+
 $syncScript = Join-Path $PSScriptRoot 'sharepoint-sync.ps1'
 
 if (-not (Test-Path -LiteralPath $ConfigPath)) {
