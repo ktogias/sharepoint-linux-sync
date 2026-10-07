@@ -102,7 +102,7 @@ version_ge_76() {
 }
 
 install_latest_powershell_rpm() {
-  local tmp release_json rpm_url hashes_url rpm_file hashes_file expected_line
+  local tmp release_json rpm_url hashes_url rpm_file hashes_file expected_hash
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' RETURN
   release_json="$tmp/release.json"
@@ -125,6 +125,9 @@ for asset in release.get("assets", []):
     url = asset.get("browser_download_url")
     if re.fullmatch(r"powershell-[0-9][^-]*-[0-9]+\.rh\.x86_64\.rpm", name):
         rpm = url
+        digest = asset.get("digest") or ""
+        if digest.lower().startswith("sha256:"):
+            rpm_digest = digest.split(":", 1)[1]
     elif name == "hashes.sha256":
         hashes = url
 if not rpm or (not rpm_digest and not hashes):
@@ -145,9 +148,23 @@ PY
   if [[ -z "$expected_hash" ]]; then
     [[ -n "$hashes_url" ]] || die "No SHA-256 digest or hashes.sha256 asset was published for the PowerShell RPM"
     curl -fsSL --retry 3 --retry-delay 2 "$hashes_url" -o "$hashes_file"
-    expected_line="$(grep -F "$(basename "$rpm_url")" "$hashes_file" | head -n1 || true)"
-    [[ -n "$expected_line" ]] || die "No checksum found for downloaded PowerShell RPM"
-    expected_hash="$(awk '{print $1}' <<<"$expected_line")"
+    expected_hash="$(python3 - "$hashes_file" "$(basename "$rpm_url")" <<'PY'
+import re, sys
+
+path, target = sys.argv[1], sys.argv[2]
+with open(path, encoding="utf-8-sig", errors="strict") as fh:
+    for raw in fh:
+        fields = raw.strip().split()
+        if len(fields) < 2:
+            continue
+        digest = fields[0]
+        filename = fields[-1].lstrip("*")
+        if filename == target and re.fullmatch(r"[0-9A-Fa-f]{64}", digest):
+            print(digest.lower())
+            break
+PY
+    )"
+    [[ -n "$expected_hash" ]] || die "No checksum found for downloaded PowerShell RPM"
   fi
 
   [[ "$expected_hash" =~ ^[0-9A-Fa-f]{64}$ ]] || die "Invalid SHA-256 checksum for downloaded PowerShell RPM"
