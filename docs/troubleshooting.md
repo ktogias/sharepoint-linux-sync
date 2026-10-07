@@ -18,7 +18,11 @@ Expected. `Connect-MgGraph -ContextScope CurrentUser` uses the current-user toke
 
 ## Large files take more than five minutes
 
-Downloads use a pre-authenticated Graph download URL and PowerShell `Invoke-WebRequest`. `OperationTimeoutSeconds` limits a stall between stream reads rather than total transfer time. Large files may therefore take much longer than the configured value as long as data continues flowing.
+Downloads use a short-lived pre-authenticated Graph download URL and the system
+`curl` client. The URL is passed through a mode-0600 temporary curl config
+rather than the process command line. `OperationTimeoutSeconds` is mapped to a
+low-speed/stall timeout, not a total transfer deadline, so large files can run
+for much longer while bytes continue flowing.
 
 ## Sync was interrupted
 
@@ -33,3 +37,18 @@ Remote deletions are mirrored locally. The SharePoint source remains read-only; 
 ```bash
 journalctl --user -u sharepoint-sync.service -n 200 --no-pager
 ```
+
+## PowerShell `Invoke-WebRequest` NullReferenceException
+
+Some PowerShell releases can encounter `System.NullReferenceException` in
+`Invoke-WebRequest` for otherwise valid SharePoint download responses. Current
+releases of this tool use `curl` for the file byte stream and keep Microsoft
+Graph PowerShell for authenticated metadata and delta requests.
+
+## One file returns HTTP 403 / Access denied
+
+By default this fails the project, because an incomplete mirror should not be
+reported as complete. If item-specific restrictions are expected, set
+`"skipForbidden": true` for that project. The denied item is logged and tracked
+in state, the rest of the project continues, and the item is retried on later
+runs.

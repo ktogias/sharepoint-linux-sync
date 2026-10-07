@@ -3,6 +3,7 @@
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -25,6 +26,21 @@ class ConfigTests(unittest.TestCase):
             text=True,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_skip_forbidden_must_be_boolean(self) -> None:
+        data = json.loads(EXAMPLE.read_text(encoding="utf-8"))
+        data[0]["skipForbidden"] = "yes"
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "projects.json"
+            path.write_text(json.dumps(data), encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(VALIDATOR), str(path)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("skipForbidden must be boolean", result.stderr)
 
     def test_example_has_no_credential_keys(self) -> None:
         data = json.loads(EXAMPLE.read_text(encoding="utf-8"))

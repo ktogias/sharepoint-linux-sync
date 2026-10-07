@@ -13,7 +13,7 @@ Initial public release. Fedora x86_64 is the supported installation target for n
 - read-only access to SharePoint through Microsoft Graph;
 - multiple independent projects/document libraries from one JSON configuration;
 - initial recursive mirror followed by incremental delta synchronization;
-- resumable large-file downloads with retry and provider-version checks;
+- resumable large-file downloads through `curl`, with retry and provider-version checks;
 - local handling of remote creates, updates, moves and deletions;
 - per-project state and locking;
 - persistent delegated Microsoft Graph authentication through the PowerShell SDK;
@@ -84,7 +84,8 @@ Example:
     "sitePath": "/sites/ExampleProject",
     "driveName": "Documents",
     "remoteRoot": "General",
-    "localRoot": "~/SharePoint/ExampleProject/General"
+    "localRoot": "~/SharePoint/ExampleProject/General",
+    "skipForbidden": false
   }
 ]
 ```
@@ -182,7 +183,9 @@ Configuration:
 - Local mirror files should be treated as cache/materialization, not as an editing workspace.
 - The delta checkpoint advances only after all local operations for the batch succeed.
 - Large-file partial downloads are retained and resumed only when their provider `eTag` and expected size still match.
+- File bytes are transferred with the system `curl` client; short-lived pre-authenticated download URLs are kept out of the process command line.
 - If a provider request fails, the tool reports failure rather than treating it as an empty result.
+- Item-specific HTTP 403 failures can be explicitly tolerated per project with `"skipForbidden": true`; such items remain marked as denied and are retried later.
 
 ## Troubleshooting
 
