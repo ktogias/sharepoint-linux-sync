@@ -51,7 +51,9 @@ By default this fails the project, because an incomplete mirror should not be
 reported as complete. If item-specific restrictions are expected, set
 `"skipForbidden": true` for that project. The denied item is logged and tracked
 in state, the rest of the project continues, and the item is retried on later
-runs.
+runs. The final `DONE` line reports `forbidden pending`, which is the number
+of denied files that still remain incomplete after retries and the current delta
+batch.
 
 ## PowerShell named-pipe shutdown noise
 

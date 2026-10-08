@@ -4,6 +4,7 @@
 
 - Disable PowerShell's optional diagnostics IPC named-pipe listener for tool-managed processes with `POWERSHELL_DIAGNOSTICS_OPTOUT=1`.
 - Apply the setting to systemd, CLI wrappers, installer and doctor so successful runs do not emit shutdown-only `NamedPipeIPC_ServerListenerError` noise.
+- Report all pending denied items in the final sync summary, including previously denied files retried before the delta pass.
 
 ## 0.1.2
 

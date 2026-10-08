@@ -624,7 +624,7 @@ try {
     $folders = 0
     $deleted = 0
     $moved = 0
-    $forbidden = 0
+    $forbiddenNew = 0
 
     foreach ($id in $latest.Keys) {
         $item = $latest[$id]
@@ -719,7 +719,7 @@ try {
                     -ExpectedSize $item['size']
 
                 if ($downloadResult['status'] -eq 'forbidden') {
-                    $forbidden++
+                    $forbiddenNew++
                 }
                 else {
                     if ($item['lastModifiedDateTime']) {
@@ -747,6 +747,16 @@ try {
         }
     }
 
+    # Count the denied items that remain pending after both the pre-delta
+    # recovery pass and the current delta batch. This makes the summary reflect
+    # the actual incomplete portion of the local mirror, not only new 403s.
+    $forbiddenPending = @(
+        $state['items'].Values |
+            Where-Object {
+                $_['denied'] -and -not [bool]$_['folder']
+            }
+    ).Count
+
     # Advance the checkpoint only after all local effects above succeeded.
     $state['version'] = 2
     $state['deltaLink'] = $newDeltaLink
@@ -754,7 +764,8 @@ try {
 
     Write-SyncLog (
         "DONE: $downloaded downloaded, $skipped unchanged, $folders folders, " +
-        "$moved moved, $deleted deleted, $forbidden forbidden"
+        "$moved moved, $deleted deleted, $forbiddenPending forbidden pending " +
+        "($forbiddenNew new this run)"
     )
 }
 finally {
