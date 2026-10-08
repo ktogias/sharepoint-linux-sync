@@ -52,3 +52,14 @@ reported as complete. If item-specific restrictions are expected, set
 `"skipForbidden": true` for that project. The denied item is logged and tracked
 in state, the rest of the project continues, and the item is retried on later
 runs.
+
+## PowerShell named-pipe shutdown noise
+
+PowerShell 7.6 creates a diagnostics IPC named-pipe listener by default. On
+non-Windows systems, shutdown of that listener can occasionally produce a
+`NamedPipeIPC_ServerListenerError` even after a successful command. This tool
+does not use `Enter-PSHostProcess` or that diagnostics pipe, so tool-managed
+PowerShell processes set `POWERSHELL_DIAGNOSTICS_OPTOUT=1` before PowerShell
+starts. This disables creation of the optional diagnostics named pipe and avoids
+the shutdown-only noise without changing Microsoft Graph authentication or sync
+behavior.

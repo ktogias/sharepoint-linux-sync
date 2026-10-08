@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3
+
+- Disable PowerShell's optional diagnostics IPC named-pipe listener for tool-managed processes with `POWERSHELL_DIAGNOSTICS_OPTOUT=1`.
+- Apply the setting to systemd, CLI wrappers, installer and doctor so successful runs do not emit shutdown-only `NamedPipeIPC_ServerListenerError` noise.
+
 ## 0.1.2
 
 - Replace the PowerShell Invoke-WebRequest file-transfer path with a curl-based resumable downloader to avoid provider-specific runtime NullReferenceException failures.

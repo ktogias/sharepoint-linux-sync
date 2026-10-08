@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 set -euo pipefail
+export POWERSHELL_DIAGNOSTICS_OPTOUT=1
 exec pwsh -NoLogo -NoProfile -Command '
 $ErrorActionPreference = "Stop"
 Import-Module Microsoft.Graph.Authentication

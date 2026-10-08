@@ -42,6 +42,20 @@ class ConfigTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("skipForbidden must be boolean", result.stderr)
 
+    def test_powershell_diagnostics_listener_is_disabled(self) -> None:
+        service = (ROOT / "systemd" / "sharepoint-sync.service").read_text(encoding="utf-8")
+        self.assertIn("Environment=POWERSHELL_DIAGNOSTICS_OPTOUT=1", service)
+
+        for relative in (
+            "bin/sharepoint-sync",
+            "bin/sharepoint-sync-all",
+            "bin/sharepoint-sync-auth",
+            "setup-fedora.sh",
+            "scripts/doctor.sh",
+        ):
+            text = (ROOT / relative).read_text(encoding="utf-8")
+            self.assertIn("POWERSHELL_DIAGNOSTICS_OPTOUT=1", text)
+
     def test_example_has_no_credential_keys(self) -> None:
         data = json.loads(EXAMPLE.read_text(encoding="utf-8"))
         serialized = json.dumps(data).lower()

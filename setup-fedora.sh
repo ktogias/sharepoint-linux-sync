@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 set -Eeuo pipefail
+export POWERSHELL_DIAGNOSTICS_OPTOUT=1
 
 APP_NAME="sharepoint-sync"
 MIN_PWSH_MAJOR=7

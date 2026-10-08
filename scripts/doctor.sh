@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: Apache-2.0
 set -u
+export POWERSHELL_DIAGNOSTICS_OPTOUT=1
 
 fail=0
 config="${1:-${XDG_CONFIG_HOME:-$HOME/.config}/sharepoint-sync/projects.json}"
