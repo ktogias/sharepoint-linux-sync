@@ -588,10 +588,34 @@ try {
     $changes = @()
     $newDeltaLink = $null
     $pageNumber = 0
+    $resynced = $false
 
     do {
         $pageNumber++
-        $response = Invoke-MgGraphRequest -Method GET -Uri $url
+        try {
+            $response = Invoke-MgGraphRequest -Method GET -Uri $url
+        }
+        catch {
+            # Graph answers 410 Gone when a stored delta token has expired or
+            # can no longer be served (resyncRequired). Restart once from a
+            # full enumeration of the root instead of failing on every run.
+            $statusCode = $null
+            if ($_.Exception.Response) {
+                $statusCode = [int]$_.Exception.Response.StatusCode
+            }
+            $isGone = ($statusCode -eq 410) -or ($_.Exception.Message -match '\bGone\b')
+
+            if ($isGone -and $state['deltaLink'] -and -not $resynced) {
+                $resynced = $true
+                Write-SyncLog 'RESYNC  delta token expired (HTTP 410); restarting from a full enumeration'
+                $url = "https://graph.microsoft.com/v1.0/drives/$driveId/items/$rootId/delta"
+                $changes = @()
+                $pageNumber = 0
+                continue
+            }
+
+            throw
+        }
         $batch = @($response['value'])
         $changes += $batch
 
@@ -756,6 +780,13 @@ try {
                 $_['denied'] -and -not [bool]$_['folder']
             }
     ).Count
+
+    # A full enumeration after a 410 carries no deletion events for items that
+    # disappeared while the token was invalid. Report them; keep local copies.
+    if ($resynced) {
+        $stale = @($state['items'].Keys | Where-Object { -not $latest.ContainsKey([string]$_) })
+        Write-SyncLog "RESYNC  $($stale.Count) previously synced item(s) absent from the full enumeration; local copies kept"
+    }
 
     # Advance the checkpoint only after all local effects above succeeded.
     $state['version'] = 2

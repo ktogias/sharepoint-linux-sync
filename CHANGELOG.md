@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Recover from an expired delta token. When Graph answers HTTP 410 Gone to the stored delta link (`resyncRequired`), restart once from a full enumeration instead of failing on every run.
+- After such a resync, log how many previously synced items are absent from the full enumeration. Their local copies are kept.
+
 ## 0.1.3
 
 - Disable PowerShell's optional diagnostics IPC named-pipe listener for tool-managed processes with `POWERSHELL_DIAGNOSTICS_OPTOUT=1`.
